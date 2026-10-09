@@ -221,3 +221,13 @@ footer{background:#203a61}.purchase-dock a{background:#203a61}.solid-link:hover{
 .nature{background:#19345e}.nature-background{background:linear-gradient(90deg,#1b345cf5 0%,#1b345ce8 55%,#1b345c92),url('assets/stilllife-v15.jpg') center/cover;opacity:.82}
 .touch-story{background:#edf2fb}.daily{background:#f0f3fb}.origin,.faq{background:#e4ecfa}
 @media(max-width:760px){.nature-background{background:linear-gradient(#1b345ceb,#1b345cf5),url('assets/stilllife-v15.jpg') center/cover}}
+
+/* Model-only touch ownership and quiet loading typography. */
+#product-canvas{touch-action:none;user-select:none;-webkit-user-select:none}
+#object-status{position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;pointer-events:none;color:#29455f;background:transparent;text-align:center;padding:30px}
+#object-status .loading-brand{font-family:Georgia,serif;font-size:42px;letter-spacing:.04em;font-weight:normal}
+#object-status .loading-caption{font-size:16px;letter-spacing:.16em}
+#object-status .loading-note{font-size:11px;letter-spacing:.08em;opacity:.65}
+.object-stage:not(.has-product-3d):not(.is-unavailable) .object-tools,.object-stage:not(.has-product-3d):not(.is-unavailable) .object-hint{visibility:hidden}
+
+#object-status{background:radial-gradient(ellipse at center,#e9f2fbe8 0%,#e9f2fbbd 36%,#e9f2fb00 74%);text-shadow:0 1px 8px #eff6ff}
