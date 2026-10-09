@@ -6,7 +6,9 @@ const info={eye:{name:'Under Eye Mask',category:'目元用シート / 60枚',des
 const canvas=q('#product-canvas'),stage=q('.object-stage'),status=q('#object-status'),fallback=q('#object-fallback');
 let renderer,scene,camera,holder,activeModel,activeKey='eye',models={},loadToken=0,lidOpen=false,sheetLift=false,visible=true,dirty=true,lastTime=0,rafId=0,frameCallback=null,renderCount=0,drag=null,transition=null,contact=null,blendScene,blendCamera,blendMaterial,oldTarget,newTarget,dragTarget=null;
 const reduced=()=>document.body.classList.contains('motion-off')||matchMedia('(prefers-reduced-motion: reduce)').matches;
-let reflectionTarget=0,reflectionCurrent=0;
+let reflectionTarget=0,reflectionCurrent=0,interactionLift=0;
+const hitRay=new THREE.Raycaster(),hitPoint=new THREE.Vector2();
+function hitsProduct(x,y){if(!activeModel||!camera)return false;const r=canvas.getBoundingClientRect();hitPoint.set((x-r.left)/r.width*2-1,1-(y-r.top)/r.height*2);scene.updateMatrixWorld(true);hitRay.setFromCamera(hitPoint,camera);return hitRay.intersectObject(activeModel,true).some(h=>h.object.visible&&h.object.material?.opacity!==0);}
 const initial={eye:[0,-.16,0],serum:[0,-.18,0],wash:[0,-.22,0]};
 const closed=new Map(),loads=new Map();
 const groundBounds=new THREE.Box3(),drawingSize=new THREE.Vector2();
@@ -23,7 +25,7 @@ function setWashType(type){if(!washTypes[type])return;washType=type;washColorTar
 qa('[data-wash-color]').forEach(b=>b.addEventListener('click',()=>setWashType(b.dataset.washColor)));
 function movable(){return activeModel?.getObjectByName({eye:'JarLid',serum:'BottleCap',wash:'WashCap'}[activeKey])}
 function restore(){activeModel?.traverse(node=>{const position=closed.get(node);if(position){node.position.copy(position);node.rotation.y=0}});lidOpen=false;sheetLift=false}
-function groundObject(group){group.updateMatrixWorld(true);groundBounds.setFromObject(group);group.position.y+=-1.705-groundBounds.min.y;group.updateMatrixWorld(true)}
+function groundObject(group){group.updateMatrixWorld(true);groundBounds.setFromObject(group);group.position.y+=-1.705+interactionLift-groundBounds.min.y;group.updateMatrixWorld(true)}
 function resetView(){dragTarget=null;if(holder){holder.rotation.set(...initial[activeKey]);holder.position.z=.55;holder.updateMatrixWorld(true);groundBounds.setFromObject(holder);holder.position.z+=1.28-groundBounds.max.z;groundObject(holder);invalidate()}}
 function paintInformation(key){activeKey=key;const p=key==='wash'?{...info[key],category:'洗顔料 / '+washType.toUpperCase()+' / 100 g',price:washTypes[washType].price}:info[key];q('#home').dataset.product=key;q('#wash-colors').hidden=key!=='wash';qa('[data-object]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.object===key)));const repaint=()=>{q('#hero-title').replaceChildren(document.createTextNode(p.title[0]),document.createElement('br'));const em=document.createElement('em');em.textContent=p.title[1];q('#hero-title').append(em);for(const [id,value] of [['object-name',p.name],['object-category',p.category],['object-description',p.description],['object-price',p.price]])q('#'+id).textContent=value;q('#object-buy').href=window.aoeProducts[key].url;};if(window.aoeTextTransition)window.aoeTextTransition(['#hero-title','#object-name','#object-category','#object-description','#object-price'].map(q),repaint);else repaint();fallback.src=p.image;fallback.alt=p.name+' ご提供の実物写真';canvas.setAttribute('aria-label',p.name+'の立体モデル。ドラッグ、または左右・上下キーで回転。縦スクロールで次のセクションへ。');q('#open-lid').setAttribute('aria-label',key==='eye'?'ふたを開く':'キャップを開く');q('#open-lid').title=q('#open-lid').getAttribute('aria-label');q('#open-lid').setAttribute('aria-pressed','false');q('#lift-sheet').hidden=true;q('#lift-sheet').setAttribute('aria-pressed','false');q('#stage-caption').textContent='';window.dispatchEvent(new CustomEvent('product-selected',{detail:key}));}
 async function loadModel(key){
@@ -91,7 +93,7 @@ function resize(){
 }
 function contactFor(group){
  const style=contactStyle[group.userData.key];if(!style)return;
- contact.scale.set(style.width/2.9,style.depth,1);contact.material.opacity=style.opacity;
+ contact.scale.set(style.width/2.9,style.depth,1);contact.material.opacity=style.opacity*(1-interactionLift*1.4);
  contact.position.x=group.position.x;contact.position.z=group.position.z;
 }
 function renderModel(group,target){
@@ -118,6 +120,8 @@ function frame(now){
   if(Math.abs(cleanser.material.color.r-washColorTarget.r)+Math.abs(cleanser.material.color.g-washColorTarget.g)+Math.abs(cleanser.material.color.b-washColorTarget.b)<.0001)cleanser.material.color.copy(washColorTarget);
   dirty=true;moving=true;
  }
+ const liftTarget=drag?.30:0;
+ if(holder&&!transition&&Math.abs(liftTarget-interactionLift)>.0001){interactionLift+=(liftTarget-interactionLift)*(reduced()?1:1-Math.exp(-8*dt));groundObject(holder);dirty=true;moving=true;}
  if(dragTarget&&holder&&!transition){
   const amount=reduced()?1:1-Math.exp(-7*dt);
   holder.rotation.x+=(dragTarget.x-holder.rotation.x)*amount;holder.rotation.y+=(dragTarget.y-holder.rotation.y)*amount;
@@ -169,22 +173,22 @@ updateScrollReflection();
 window.addEventListener('motion-changed',invalidate);selectProduct('eye');
 
 }catch(e){renderer=null;stage.classList.add('is-unavailable');status.textContent='実物の参照写真を表示しています。';qa('.object-tools button').forEach(b=>b.disabled=true);console.warn('WebGL unavailable')}
-// Lock the document for the entire touch gesture, including Safari rubber-band scrolling.
+// Only a raycast hit on the product owns a touch gesture.
 let pageTouchLock=null;
-function unlockTouchPage(){if(!pageTouchLock)return;const saved=pageTouchLock;pageTouchLock=null;document.body.style.cssText=saved.body;document.documentElement.style.cssText=saved.html;const behavior=document.documentElement.style.scrollBehavior;document.documentElement.style.scrollBehavior='auto';window.scrollTo(saved.x,saved.y);document.documentElement.style.scrollBehavior=behavior;}
-document.addEventListener('touchstart',e=>{if(!stage.contains(e.target)||e.target.closest('button,a')||pageTouchLock)return;pageTouchLock={x:scrollX,y:scrollY,body:document.body.style.cssText,html:document.documentElement.style.cssText};document.documentElement.style.overflow='hidden';Object.assign(document.body.style,{position:'fixed',top:-pageTouchLock.y+'px',left:-pageTouchLock.x+'px',width:'100%',overflow:'hidden'});},{capture:true,passive:false});
-document.addEventListener('touchmove',e=>{if(pageTouchLock&&e.cancelable)e.preventDefault()},{capture:true,passive:false});
-for(const name of ['touchend','touchcancel'])document.addEventListener(name,e=>{if(!e.touches.length)unlockTouchPage()},{capture:true,passive:true});
+function beginDrag(id,x,y){settleTransition();stage.classList.add('has-been-touched');dragTarget={x:holder.rotation.x,y:holder.rotation.y};drag={id,lastX:x,lastY:y};invalidate();}
+function moveDrag(x,y){dragTarget.y+=(x-drag.lastX)*.0042;dragTarget.x=THREE.MathUtils.clamp(dragTarget.x+(y-drag.lastY)*.0030,-.70,.70);drag.lastX=x;drag.lastY=y;invalidate();}
+function unlockTouchPage(){drag=null;invalidate();if(!pageTouchLock)return;const saved=pageTouchLock;pageTouchLock=null;document.body.style.cssText=saved.body;document.documentElement.style.cssText=saved.html;const behavior=document.documentElement.style.scrollBehavior;document.documentElement.style.scrollBehavior='auto';window.scrollTo(saved.x,saved.y);document.documentElement.style.scrollBehavior=behavior;}
+document.addEventListener('touchstart',e=>{const t=e.changedTouches[0];if(!t||!stage.contains(e.target)||e.target.closest('button,a')||pageTouchLock||!hitsProduct(t.clientX,t.clientY))return;if(e.cancelable)e.preventDefault();beginDrag(t.identifier,t.clientX,t.clientY);pageTouchLock={x:scrollX,y:scrollY,body:document.body.style.cssText,html:document.documentElement.style.cssText};document.documentElement.style.overflow='hidden';Object.assign(document.body.style,{position:'fixed',top:-pageTouchLock.y+'px',left:-pageTouchLock.x+'px',width:'100%',overflow:'hidden'});},{capture:true,passive:false});
+document.addEventListener('touchmove',e=>{if(!pageTouchLock)return;if(e.cancelable)e.preventDefault();const t=[...e.touches].find(t=>t.identifier===drag?.id);if(t)moveDrag(t.clientX,t.clientY);},{capture:true,passive:false});
+for(const name of ['touchend','touchcancel'])document.addEventListener(name,e=>{if(pageTouchLock&&![...e.touches].some(t=>t.identifier===drag?.id))unlockTouchPage()},{capture:true,passive:true});
 window.addEventListener('blur',unlockTouchPage);
-// Touch gestures on the model belong to rotation; the surrounding page remains scrollable.
-canvas.style.touchAction='none';
-canvas.addEventListener('touchmove',e=>{if(activeModel&&e.cancelable)e.preventDefault()},{passive:false});
-canvas.addEventListener('pointerdown',e=>{if(!activeModel||e.button!==0||!e.isPrimary)return;e.preventDefault();settleTransition();stage.classList.add('has-been-touched');dragTarget={x:holder.rotation.x,y:holder.rotation.y};drag={id:e.pointerId,lastX:e.clientX,lastY:e.clientY};canvas.setPointerCapture(e.pointerId)});
-canvas.addEventListener('pointermove',e=>{if(!drag||e.pointerId!==drag.id)return;e.preventDefault();dragTarget.y+=(e.clientX-drag.lastX)*.0042;dragTarget.x=THREE.MathUtils.clamp(dragTarget.x+(e.clientY-drag.lastY)*.0030,-.70,.70);drag.lastX=e.clientX;drag.lastY=e.clientY;invalidate()});
-for(const type of ['pointerup','pointercancel','lostpointercapture'])canvas.addEventListener(type,e=>{if(drag?.id===e.pointerId)drag=null});
+canvas.style.touchAction='auto';
+canvas.addEventListener('pointerdown',e=>{if(e.pointerType==='touch'||e.button!==0||!e.isPrimary||!hitsProduct(e.clientX,e.clientY))return;e.preventDefault();beginDrag(e.pointerId,e.clientX,e.clientY);canvas.setPointerCapture(e.pointerId);});
+canvas.addEventListener('pointermove',e=>{if(e.pointerType==='touch'||!drag||e.pointerId!==drag.id)return;e.preventDefault();moveDrag(e.clientX,e.clientY)});
+for(const type of ['pointerup','pointercancel','lostpointercapture'])canvas.addEventListener(type,e=>{if(e.pointerType!=='touch'&&drag?.id===e.pointerId){drag=null;invalidate();}});
 canvas.addEventListener('keydown',e=>{if(!holder)return;if(!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home'].includes(e.key))return;e.preventDefault();if(e.key==='Home')resetView();else if(e.key==='ArrowLeft'||e.key==='ArrowRight')holder.rotation.y+=e.key==='ArrowLeft'?-.18:.18;else holder.rotation.x=THREE.MathUtils.clamp(holder.rotation.x+(e.key==='ArrowUp'?-.12:.12),-.75,.75);groundObject(holder);invalidate()});
 q('#reset-object').addEventListener('click',()=>{restore();resetView();q('#open-lid').setAttribute('aria-pressed','false');q('#open-lid').setAttribute('aria-label',activeKey==='eye'?'ふたを開く':'キャップを開く');q('#lift-sheet').hidden=true});
 q('#open-lid').addEventListener('click',()=>{if(!activeModel)return;settleTransition();lidOpen=!lidOpen;if(!lidOpen)sheetLift=false;q('#open-lid').setAttribute('aria-pressed',String(lidOpen));q('#open-lid').setAttribute('aria-label',lidOpen?'ふたを閉じる':activeKey==='eye'?'ふたを開く':'キャップを開く');q('#open-lid').title=q('#open-lid').getAttribute('aria-label');q('#lift-sheet').hidden=!lidOpen||activeKey!=='eye';groundObject(holder);invalidate()});
 q('#lift-sheet').addEventListener('click',()=>{sheetLift=!sheetLift;q('#lift-sheet').setAttribute('aria-pressed',String(sheetLift));q('#lift-sheet').setAttribute('aria-label',sheetLift?'シートを戻す':'シートを見る');groundObject(holder);invalidate()});
 canvas.addEventListener('webglcontextlost',()=>{stage.classList.remove('has-product-3d');stage.classList.add('is-unavailable');status.hidden=false;status.textContent='実物の参照写真を表示しています。'});
-window.product3D={select:selectProduct,setWashType,state:()=>({key:activeKey,washType,washColor:models.wash?.getObjectByName('CleanserLiquid').material.color.getHexString(),loaded:!!activeModel,meshes:(()=>{let n=0;activeModel?.traverse(o=>{if(o.isMesh)n++});return n})(),camera:camera?.position.toArray(),fov:camera?.fov,reflectionRotation:scene?.environmentRotation.toArray(),reflectionTarget,transitionProgress:transition?blendMaterial?.uniforms.progress.value:1,renderCount,scheduled:!!rafId,visible,ground:holder?new THREE.Box3().setFromObject(holder).min.y:null,anchor:holder?.position.toArray(),interaction:true,rotation:holder?.rotation.y,rotationXYZ:holder?.rotation.toArray(),lid:lidOpen,sheet:sheetLift,view:'3d',transitioning:!!transition,quality:{pixelRatio:renderer?.getPixelRatio(),samples:newTarget?.samples,buffer:[newTarget?.width,newTarget?.height],reflectionSize:512},modelFiles:Object.keys(models)}),render:invalidate};
+window.product3D={select:selectProduct,setWashType,state:()=>({key:activeKey,washType,washColor:models.wash?.getObjectByName('CleanserLiquid').material.color.getHexString(),loaded:!!activeModel,meshes:(()=>{let n=0;activeModel?.traverse(o=>{if(o.isMesh)n++});return n})(),camera:camera?.position.toArray(),fov:camera?.fov,reflectionRotation:scene?.environmentRotation.toArray(),reflectionTarget,transitionProgress:transition?blendMaterial?.uniforms.progress.value:1,renderCount,scheduled:!!rafId,visible,ground:holder?new THREE.Box3().setFromObject(holder).min.y:null,anchor:holder?.position.toArray(),interaction:true,rotation:holder?.rotation.y,rotationXYZ:holder?.rotation.toArray(),lid:lidOpen,sheet:sheetLift,view:'3d',transitioning:!!transition,interactionLift,hitTest:hitsProduct,quality:{pixelRatio:renderer?.getPixelRatio(),samples:newTarget?.samples,buffer:[newTarget?.width,newTarget?.height],reflectionSize:512},modelFiles:Object.keys(models)}),render:invalidate};
