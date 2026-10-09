@@ -169,6 +169,13 @@ updateScrollReflection();
 window.addEventListener('motion-changed',invalidate);selectProduct('eye');
 
 }catch(e){renderer=null;stage.classList.add('is-unavailable');status.textContent='実物の参照写真を表示しています。';qa('.object-tools button').forEach(b=>b.disabled=true);console.warn('WebGL unavailable')}
+// Lock the document for the entire touch gesture, including Safari rubber-band scrolling.
+let pageTouchLock=null;
+function unlockTouchPage(){if(!pageTouchLock)return;const saved=pageTouchLock;pageTouchLock=null;document.body.style.cssText=saved.body;document.documentElement.style.cssText=saved.html;const behavior=document.documentElement.style.scrollBehavior;document.documentElement.style.scrollBehavior='auto';window.scrollTo(saved.x,saved.y);document.documentElement.style.scrollBehavior=behavior;}
+document.addEventListener('touchstart',e=>{if(!stage.contains(e.target)||e.target.closest('button,a')||pageTouchLock)return;pageTouchLock={x:scrollX,y:scrollY,body:document.body.style.cssText,html:document.documentElement.style.cssText};document.documentElement.style.overflow='hidden';Object.assign(document.body.style,{position:'fixed',top:-pageTouchLock.y+'px',left:-pageTouchLock.x+'px',width:'100%',overflow:'hidden'});},{capture:true,passive:false});
+document.addEventListener('touchmove',e=>{if(pageTouchLock&&e.cancelable)e.preventDefault()},{capture:true,passive:false});
+for(const name of ['touchend','touchcancel'])document.addEventListener(name,e=>{if(!e.touches.length)unlockTouchPage()},{capture:true,passive:true});
+window.addEventListener('blur',unlockTouchPage);
 // Touch gestures on the model belong to rotation; the surrounding page remains scrollable.
 canvas.style.touchAction='none';
 canvas.addEventListener('touchmove',e=>{if(activeModel&&e.cancelable)e.preventDefault()},{passive:false});

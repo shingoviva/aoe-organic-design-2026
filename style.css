@@ -233,3 +233,5 @@ footer{background:#203a61}.purchase-dock a{background:#203a61}.solid-link:hover{
 #object-status{background:radial-gradient(ellipse at center,#e9f2fbe8 0%,#e9f2fbbd 36%,#e9f2fb00 74%);text-shadow:0 1px 8px #eff6ff}
 
 #object-status{background:none!important;border:0!important;box-shadow:none!important;outline:0!important;backdrop-filter:none!important;color:#f7fbff;text-shadow:0 1px 10px #142f49,0 0 24px #142f4980}
+
+.object-stage{touch-action:none;overscroll-behavior:contain}.object-stage canvas{touch-action:none!important}
