@@ -171,6 +171,7 @@ window.addEventListener('motion-changed',invalidate);selectProduct('eye');
 }catch(e){renderer=null;stage.classList.add('is-unavailable');status.textContent='実物の参照写真を表示しています。';qa('.object-tools button').forEach(b=>b.disabled=true);console.warn('WebGL unavailable')}
 // Touch gestures on the model belong to rotation; the surrounding page remains scrollable.
 canvas.style.touchAction='none';
+canvas.addEventListener('touchmove',e=>{if(activeModel&&e.cancelable)e.preventDefault()},{passive:false});
 canvas.addEventListener('pointerdown',e=>{if(!activeModel||e.button!==0||!e.isPrimary)return;e.preventDefault();settleTransition();stage.classList.add('has-been-touched');dragTarget={x:holder.rotation.x,y:holder.rotation.y};drag={id:e.pointerId,lastX:e.clientX,lastY:e.clientY};canvas.setPointerCapture(e.pointerId)});
 canvas.addEventListener('pointermove',e=>{if(!drag||e.pointerId!==drag.id)return;e.preventDefault();dragTarget.y+=(e.clientX-drag.lastX)*.0042;dragTarget.x=THREE.MathUtils.clamp(dragTarget.x+(e.clientY-drag.lastY)*.0030,-.70,.70);drag.lastX=e.clientX;drag.lastY=e.clientY;invalidate()});
 for(const type of ['pointerup','pointercancel','lostpointercapture'])canvas.addEventListener(type,e=>{if(drag?.id===e.pointerId)drag=null});
